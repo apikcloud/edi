@@ -148,7 +148,7 @@ class TestDespatchAdviceImport(TransactionCase):
         with self.assertRaises(UserError) as ue:
             self.DespatchAdviceImport.process_data(data)
         self.assertEqual(
-            ue.exception.name, _("No purchase order found for name 123456.")
+            str(ue.exception), _("No purchase order found for name 123456.")
         )
 
     def test_process_data_with_backorder_qty(self):
@@ -389,6 +389,6 @@ class TestDespatchAdviceImport(TransactionCase):
         self.assertTrue(self.purchase_order.picking_ids)
         move_ids = self.line1.move_ids
         self.assertEqual(len(move_ids), 1)
-        self.assertEqual(sum(move_ids.mapped("product_qty")), confirmed_qty)
+        self.assertEqual(sum(move_ids.mapped("quantity")), confirmed_qty)
         assigned = move_ids.filtered(lambda s: s.state == "done")
-        self.assertEqual(assigned.product_qty, confirmed_qty)
+        self.assertEqual(assigned.quantity, confirmed_qty)

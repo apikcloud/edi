@@ -30,6 +30,9 @@ class DespatchAdviceImport(models.TransientModel):
     allow_validate_over_qty = fields.Boolean(
         "Allow Validate Over Quantity", default=True
     )
+    new_picking_id = fields.Many2one(
+        comodel_name="stock.picking",
+    )
 
     # Format of parsed despatch advice
     # {
@@ -236,7 +239,7 @@ class DespatchAdviceImport(models.TransientModel):
         stock_moves._action_confirm()
         stock_moves._action_assign()
         for move in stock_moves:
-            move.quantity_done = forced_qty or move.product_qty
+            move.quantity = forced_qty or move.product_qty
 
     def _process_conditional(self, moves, parsed_order_document, line):
         precision = self.env["decimal.precision"].precision_get(
@@ -274,7 +277,7 @@ class DespatchAdviceImport(models.TransientModel):
             ):
                 # qty planned < qty into the stock move: Split it
                 new_vals = move._split(move.product_uom_qty - qty)
-                move.quantity_done = move.product_qty
+                move.quantity = move.product_qty
                 move = self.env["stock.move"].create(new_vals[0])
 
             qty -= move.product_uom_qty
@@ -296,6 +299,7 @@ class DespatchAdviceImport(models.TransientModel):
                 # and cancel remaining qty
                 move._action_confirm(merge=False)
                 new_vals = move._split(move.product_uom_qty - backorder_qty)
+                move.quantity = move.product_qty
                 move_ids_to_cancel.append(self.env["stock.move"].create(new_vals[0]).id)
 
             backorder_qty -= move.product_uom_qty
@@ -307,6 +311,14 @@ class DespatchAdviceImport(models.TransientModel):
             self._cancel_extra_moves(moves_to_cancel)
         # move backorder moves to a backorder
         if move_ids_to_backorder:
+            if not self.new_picking_id:
+                self.new_picking_id = moves[0].picking_id.copy(
+                    {
+                        "backorder_id": move[0].picking_id.id,
+                        "move_ids": [],
+                    }
+                )
             moves_to_backorder = self.env["stock.move"].browse(move_ids_to_backorder)
+            moves_to_backorder.picking_id = self.new_picking_id
             for move in moves_to_backorder:
                 move._action_confirm(merge=False)
